@@ -1,0 +1,40 @@
+[
+  {
+    "id": "P1776167004190",
+    "timestamp": 1776167062808,
+    "name": "Nilesh",
+    "gender": "Male",
+    "city": "Mumbai",
+    "bankExperienceYears": 3.5,
+    "scenarioId": "scenario-3",
+    "scenarioTitle": "Desktop Cannot Access SharePoint",
+    "level1": "software-application",
+    "level1Label": "Software & Application",
+    "level2": "software-application-microsoft-o-ce-365-softwares",
+    "level2Label": "Microsoft/Oﬃce 365 Softwares",
+    "level3": "software-application-microsoft-o-ce-365-softwares-microsoft-sharepoint",
+    "level3Label": "Microsoft Sharepoint",
+    "selectedPath": "Software & Application -> Microsoft/Oﬃce 365 Softwares -> Microsoft Sharepoint -> Access / Permissions",
+    "expectedPath": "Software & Application -> Microsoft/Oﬃce 365 Softwares -> Microsoft Sharepoint -> Access / Permissions",
+    "result": "CORRECT"
+  },
+  {
+    "id": "P1776167064361",
+    "timestamp": 1776167155122,
+    "name": "Tushar",
+    "gender": "Male",
+    "city": "Kop",
+    "bankExperienceYears": 1,
+    "scenarioId": "scenario-8",
+    "scenarioTitle": "Flexcube Platform Access",
+    "level1": "software-application",
+    "level1Label": "Software & Application",
+    "level2": "software-application-microsoft-products",
+    "level2Label": "Microsoft Products",
+    "level3": "software-application-microsoft-products-microsoft-outlook",
+    "level3Label": "Microsoft Outlook",
+    "selectedPath": "Software & Application -> Microsoft Products -> Microsoft Outlook -> Email / Mailbox",
+    "expectedPath": "Software & Application -> Business Web Applications -> Flexcube -> Access / Permissions",
+    "result": "WRONG"
+  }
+]
