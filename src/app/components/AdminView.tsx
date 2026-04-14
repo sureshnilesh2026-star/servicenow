@@ -63,6 +63,9 @@ export function AdminView() {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10);
 
+  const correctCount = responses.filter(r => (r.result || 'WRONG') === 'CORRECT').length;
+  const wrongCount = responses.length - correctCount;
+
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
       <div className="max-w-7xl mx-auto px-6 py-12">
@@ -73,7 +76,7 @@ export function AdminView() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <StatCard
             icon={<Users className="w-6 h-6" />}
             label="Total Responses"
@@ -88,6 +91,16 @@ export function AdminView() {
             icon={<Users className="w-6 h-6" />}
             label="Scenarios"
             value={scenarios.length}
+          />
+          <StatCard
+            icon={<TrendingUp className="w-6 h-6" />}
+            label="CORRECT"
+            value={correctCount}
+          />
+          <StatCard
+            icon={<TrendingUp className="w-6 h-6" />}
+            label="WRONG"
+            value={wrongCount}
           />
         </div>
 

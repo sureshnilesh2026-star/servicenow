@@ -17,6 +17,50 @@ function normalizeLabel(text) {
     .toLowerCase();
 }
 
+/** Normalize common plural/singular variants so "Other Software" ≈ "Other Softwares". */
+function labelCanonicalForCompare(text) {
+  return normalizeLabel(text).replace(/\bsoftwares\b/g, 'software');
+}
+
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i += 1) {
+    const cur = [i];
+    for (let j = 1; j <= n; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function labelsAreSimilar(a, b) {
+  const na = normalizeLabel(a);
+  const nb = normalizeLabel(b);
+  if (na === nb) return true;
+  const ca = labelCanonicalForCompare(a);
+  const cb = labelCanonicalForCompare(b);
+  if (ca === cb) return true;
+
+  const shorter = na.length <= nb.length ? na : nb;
+  const longer = na.length > nb.length ? na : nb;
+  if (shorter.length >= 4 && longer.startsWith(shorter) && longer.length - shorter.length <= 3) {
+    return true;
+  }
+
+  const maxLen = Math.max(na.length, nb.length);
+  if (!maxLen) return true;
+  if (maxLen <= 48) {
+    return levenshtein(na, nb) <= 2;
+  }
+  return levenshtein(na, nb) / maxLen <= 0.06;
+}
+
 function parseScenarioText(rawText, expectedPath, index) {
   const text = String(rawText || '').trim();
   if (!text) return null;
@@ -83,6 +127,7 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
 
   const optionRows = [];
   const optionById = new Map();
+  const optionKeys = new Set();
   let inLevel2 = false;
   let inLevel3 = false;
   let currentLevel1 = '';
@@ -94,6 +139,35 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
     'Bank Infrastructure & Network',
   ];
   const knownLevel1Norm = new Map(knownLevel1.map(v => [normalizeLabel(v), v]));
+
+  function parentKey(p) {
+    return p === undefined || p === null ? 'root' : p;
+  }
+
+  function hasSimilarSibling(label, parent, depth) {
+    const pk = parentKey(parent);
+    for (const row of optionRows) {
+      if (row.depth !== depth) continue;
+      if (parentKey(row.parent) !== pk) continue;
+      if (labelsAreSimilar(row.label, label)) return true;
+    }
+    return false;
+  }
+
+  function addOption({ id, label, parent, depth }) {
+    if (optionById.has(id)) return false;
+    if (hasSimilarSibling(label, parent, depth)) return false;
+
+    const normalizedLabel = normalizeLabel(label);
+    const levelKey = `${depth}|${parentKey(parent)}|${normalizedLabel}`;
+    if (optionKeys.has(levelKey)) return false;
+
+    const node = { id, label, parent, depth };
+    optionById.set(id, node);
+    optionKeys.add(levelKey);
+    optionRows.push(node);
+    return true;
+  }
 
   for (const line of lines) {
     if (/^Level\s*01/i.test(line)) {
@@ -127,27 +201,19 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
       currentLevel1 = matchedLevel1;
       currentLevel2 = '';
       const id = slugify(currentLevel1);
-      if (!optionById.has(id)) {
-        const node = { id, label: currentLevel1, parent: undefined, depth: 1 };
-        optionById.set(id, node);
-        optionRows.push(node);
-      }
+      addOption({ id, label: currentLevel1, parent: undefined, depth: 1 });
       continue;
     }
 
     if (inLevel2 && currentLevel1) {
       const id = slugify(`${currentLevel1}-${bullet}`);
-      if (!optionById.has(id)) {
-        const node = { id, label: bullet, parent: slugify(currentLevel1), depth: 2 };
-        optionById.set(id, node);
-        optionRows.push(node);
-      }
+      addOption({ id, label: bullet, parent: slugify(currentLevel1), depth: 2 });
       continue;
     }
 
     if (inLevel3) {
       const asLevel2 = optionRows.find(
-        r => r.depth === 2 && normalizeLabel(r.label) === normalized,
+        r => r.depth === 2 && labelsAreSimilar(r.label, bullet),
       );
       if (asLevel2) {
         currentLevel1 = knownLevel1.find(v => slugify(v) === asLevel2.parent) || currentLevel1;
@@ -158,11 +224,7 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
       if (currentLevel1 && currentLevel2) {
         const level2Id = slugify(`${currentLevel1}-${currentLevel2}`);
         const id = slugify(`${currentLevel1}-${currentLevel2}-${bullet}`);
-        if (!optionById.has(id)) {
-          const node = { id, label: bullet, parent: level2Id, depth: 3 };
-          optionById.set(id, node);
-          optionRows.push(node);
-        }
+        addOption({ id, label: bullet, parent: level2Id, depth: 3 });
       }
     }
   }
@@ -180,11 +242,7 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
       const id = slugify(chain);
       const depth = idx + 1;
       const parent = parentId;
-      if (!optionById.has(id)) {
-        const node = { id, label, parent, depth };
-        optionById.set(id, node);
-        optionRows.push(node);
-      }
+      addOption({ id, label, parent, depth });
       parentId = id;
     });
   });
