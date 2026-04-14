@@ -40,8 +40,15 @@ async function apiSend(url: string, init: RequestInit): Promise<void> {
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
 }
 
+function canUseLocalFallback(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  );
+}
+
 export async function saveResponse(response: ParticipantResponse): Promise<void> {
-  // Prefer JSON file store via local API; fallback to browser storage.
+  // Prefer API store; fallback to browser storage only in local development.
   try {
     await apiSend('/api/responses', {
       method: 'POST',
@@ -50,6 +57,7 @@ export async function saveResponse(response: ParticipantResponse): Promise<void>
     });
     return;
   } catch {
+    if (!canUseLocalFallback()) throw new Error('Unable to save response');
     const responses = await getResponses();
     responses.push(response);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(responses));
@@ -60,6 +68,7 @@ export async function getResponses(): Promise<ParticipantResponse[]> {
   try {
     return await apiGet<ParticipantResponse[]>('/api/responses');
   } catch {
+    if (!canUseLocalFallback()) return [];
     const data = localStorage.getItem(STORAGE_KEY);
     return data ? JSON.parse(data) : [];
   }
@@ -69,15 +78,16 @@ export async function clearResponses(): Promise<void> {
   try {
     await apiSend('/api/responses', { method: 'DELETE' });
   } catch {
-    // ignore
+    if (!canUseLocalFallback()) throw new Error('Unable to clear responses');
   }
-  localStorage.removeItem(STORAGE_KEY);
+  if (canUseLocalFallback()) localStorage.removeItem(STORAGE_KEY);
 }
 
 export async function deleteResponse(id: string): Promise<void> {
   try {
     await apiSend(`/api/responses/${encodeURIComponent(id)}`, { method: 'DELETE' });
   } catch {
+    if (!canUseLocalFallback()) throw new Error('Unable to delete response');
     const responses = await getResponses();
     const next = responses.filter(r => r.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
