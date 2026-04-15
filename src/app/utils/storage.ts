@@ -95,15 +95,18 @@ export async function deleteResponse(id: string): Promise<void> {
 }
 
 export function setCurrentParticipant(info: ParticipantInfo): void {
-  sessionStorage.setItem(CURRENT_PARTICIPANT_KEY, JSON.stringify(info));
+  localStorage.setItem(CURRENT_PARTICIPANT_KEY, JSON.stringify(info));
 }
 
 export function getCurrentParticipant(): ParticipantInfo | null {
-  const data = sessionStorage.getItem(CURRENT_PARTICIPANT_KEY);
+  const data =
+    localStorage.getItem(CURRENT_PARTICIPANT_KEY) ||
+    sessionStorage.getItem(CURRENT_PARTICIPANT_KEY);
   return data ? JSON.parse(data) : null;
 }
 
 export function clearCurrentParticipant(): void {
+  localStorage.removeItem(CURRENT_PARTICIPANT_KEY);
   sessionStorage.removeItem(CURRENT_PARTICIPANT_KEY);
 }
 

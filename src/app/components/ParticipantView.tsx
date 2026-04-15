@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { CheckCircle2 } from 'lucide-react';
-import { clearCurrentParticipant, getCurrentParticipant, saveResponse } from '../utils/storage';
+import {
+  clearCurrentParticipant,
+  getCurrentParticipant,
+  saveResponse,
+  type ParticipantInfo,
+} from '../utils/storage';
 import { getScenarios, type ApiScenario } from '../utils/scenarios';
 import {
   getLevels,
@@ -9,6 +14,9 @@ import {
   type LevelsPayload,
   type NavigationOption,
 } from '../utils/levels';
+import { sanitizeText } from '../utils/text';
+
+const DUMMY_LAPTOP_MODEL = 'HP LaserJet Pro M404dn (Model: LJ-M404DN)';
 
 function normalizePath(path: string): string {
   return path
@@ -21,8 +29,10 @@ function normalizePath(path: string): string {
 export function ParticipantView() {
   const navigate = useNavigate();
   const [scenario, setScenario] = useState<ApiScenario | null>(null);
+  const [participant, setParticipant] = useState<ParticipantInfo | null>(null);
   const [levels, setLevels] = useState<LevelsPayload>({ options: [] });
   const [selectedLevels, setSelectedLevels] = useState<NavigationOption[]>([]);
+  const [descriptionInput, setDescriptionInput] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -32,6 +42,7 @@ export function ParticipantView() {
       navigate('/participant-info', { replace: true });
       return;
     }
+    setParticipant(currentParticipant);
 
     getScenarios()
       .then(loadedScenarios => {
@@ -57,21 +68,26 @@ export function ParticipantView() {
   const handleLevelSelect = (index: number, option: NavigationOption) => {
     if (isSubmitting) return;
     setSelectedLevels(prev => [...prev.slice(0, index), option]);
+    setDescriptionInput('');
   };
 
   const handleSubmit = async () => {
     if (isSubmitting || submitted) return;
-    if (!scenario || selectedLevels.length < 3) return;
+    if (!scenario || selectedLevels.length === 0) return;
     const lastSelected = selectedLevels[selectedLevels.length - 1];
     const hasMoreChildren = getChildOptions(lastSelected?.id, levels).length > 0;
     if (hasMoreChildren) return;
+    if (lastSelected?.requiresDescription && !descriptionInput.trim()) return;
     const currentParticipant = getCurrentParticipant();
     if (!currentParticipant) {
       navigate('/participant-info', { replace: true });
       return;
     }
 
-    const selectedPath = selectedLevels.map(level => level.label).join(' -> ');
+    const selectedPathBase = selectedLevels.map(level => level.label).join(' -> ');
+    const selectedPath = lastSelected?.requiresDescription
+      ? `${selectedPathBase} -> ${descriptionInput.trim()}`
+      : selectedPathBase;
     const result =
       normalizePath(selectedPath) === normalizePath(scenario.expectedPath)
         ? 'CORRECT'
@@ -156,7 +172,7 @@ export function ParticipantView() {
           ? 'Select the primary category'
           : depth === 2
             ? 'Select the subcategory'
-            : 'Select the specific area',
+            : 'What specific problem?',
       options,
     });
     const selected = selectedLevels[depth - 1];
@@ -166,8 +182,16 @@ export function ParticipantView() {
   }
 
   const canSubmit =
-    selectedLevels.length >= 3 &&
-    getChildOptions(selectedLevels[selectedLevels.length - 1]?.id, levels).length === 0;
+    selectedLevels.length > 0 &&
+    getChildOptions(selectedLevels[selectedLevels.length - 1]?.id, levels).length === 0 &&
+    (!selectedLevels[selectedLevels.length - 1]?.requiresDescription || descriptionInput.trim().length > 0);
+  const userSummary = participant
+    ? `${participant.name} (Branch Manager, ${participant.bankExperienceYears} years at HDFC, ${participant.city} Branch)`
+    : scenario.user;
+  const isDeviceHardwareBranch = selectedLevels[0]?.id === 'device-hardware';
+  const level2Label = selectedLevels[1]?.label || '';
+  const selectedAssetLabel =
+    isDeviceHardwareBranch && level2Label === 'Laptop and Desktop' ? DUMMY_LAPTOP_MODEL : '';
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950">
@@ -184,28 +208,56 @@ export function ParticipantView() {
           <h3 className="text-xl font-medium mb-2">{scenario.title}</h3>
           <p className="text-neutral-700 dark:text-neutral-200 mb-1">
             <span className="font-semibold">User : </span>
-            {scenario.user}
+            {userSummary}
           </p>
           <p className="text-neutral-700 dark:text-neutral-200 mb-1">
             <span className="font-semibold">Issue : </span>
-            {scenario.issue}
+            {sanitizeText(scenario.issue)}
           </p>
-          <p className="text-neutral-700 dark:text-neutral-200">{scenario.question}</p>
+          <p className="text-neutral-700 dark:text-neutral-200">
+            {sanitizeText(scenario.question)}
+          </p>
         </div>
 
         <div className="space-y-8">
           {levelGroups.map((group, index) => (
-            <SelectionLevel
-              key={group.title}
-              title={group.title}
-              description={group.description}
-              options={group.options}
-              selectedOption={selectedLevels[index] || null}
-              onSelect={option => handleLevelSelect(index, option)}
-              disabled={isSubmitting}
-            />
+            <div key={group.title}>
+              {selectedAssetLabel && index === 2 && (
+                <div className="mb-6 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5">
+                  <h3 className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2">
+                    SELECTED DEVICE
+                  </h3>
+                  <p className="text-neutral-800 dark:text-neutral-100 font-medium">
+                    {selectedAssetLabel}
+                  </p>
+                </div>
+              )}
+              <SelectionLevel
+                title={group.title}
+                description={group.description}
+                options={group.options}
+                selectedOption={selectedLevels[index] || null}
+                onSelect={option => handleLevelSelect(index, option)}
+                disabled={isSubmitting}
+              />
+            </div>
           ))}
         </div>
+
+        {selectedLevels[selectedLevels.length - 1]?.requiresDescription && (
+          <div className="mt-8 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5">
+            <h3 className="text-sm font-medium text-neutral-500 dark:text-neutral-400 mb-2">
+              Description
+            </h3>
+            <textarea
+              value={descriptionInput}
+              onChange={e => setDescriptionInput(e.target.value)}
+              rows={3}
+              className="w-full px-4 py-2 border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-950"
+              placeholder="Enter details"
+            />
+          </div>
+        )}
 
         {selectedLevels.length > 0 && (
           <div className="mt-12 pt-8 border-t border-neutral-200 dark:border-neutral-700">

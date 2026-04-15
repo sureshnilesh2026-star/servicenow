@@ -10,16 +10,68 @@ import {
 } from '../utils/storage';
 import { getScenarios, type ApiScenario } from '../utils/scenarios';
 
+const ADMIN_PASSWORD = 't';
+
 export function AdminView() {
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [responses, setResponses] = useState<ParticipantResponse[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<string>('all');
   const [isTopPathsOpen, setIsTopPathsOpen] = useState(false);
   const [scenarios, setScenarios] = useState<ApiScenario[]>([]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     loadResponses();
     getScenarios().then(setScenarios).catch(() => setScenarios([]));
-  }, []);
+  }, [isAuthenticated]);
+
+  const handleUnlock = () => {
+    if (password === ADMIN_PASSWORD) {
+      setIsAuthenticated(true);
+      setPassword('');
+      setAuthError('');
+      return;
+    }
+    setAuthError('Invalid password');
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-neutral-50 dark:bg-neutral-950 p-6">
+        <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700 p-8">
+          <h1 className="text-2xl font-medium mb-2">Admin Access</h1>
+          <p className="text-sm text-neutral-600 dark:text-neutral-300 mb-6">
+            Enter password to open the admin dashboard.
+          </p>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={password}
+              onChange={e => {
+                setPassword(e.target.value);
+                if (authError) setAuthError('');
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleUnlock();
+              }}
+              className="w-full px-4 py-2 border border-neutral-300 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-950"
+              placeholder="Enter admin password"
+            />
+            {authError && <p className="text-sm text-red-600">{authError}</p>}
+            <button
+              type="button"
+              onClick={handleUnlock}
+              className="w-full px-4 py-2.5 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-colors"
+            >
+              Unlock Admin
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const loadResponses = () => {
     getResponses().then(setResponses);

@@ -120,18 +120,15 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
 
   if (!text.trim()) return { options: [] };
 
-  const lines = text
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(Boolean);
+  const rawLines = text.split(/\r?\n/).map(line => line.trim());
 
   const optionRows = [];
   const optionById = new Map();
   const optionKeys = new Set();
-  let inLevel2 = false;
-  let inLevel3 = false;
+  let activeLevel = 0;
   let currentLevel1 = '';
   let currentLevel2 = '';
+  let blankRun = 0;
 
   const knownLevel1 = [
     'Device & Hardware',
@@ -169,33 +166,44 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
     return true;
   }
 
-  for (const line of lines) {
+  function isIgnorableLabel(line) {
+    return /^(a\.|b\.)\s/.test(line) || /^(problem\/issue|request)$/i.test(line);
+  }
+
+  function normalizeDocxLine(line) {
+    return line.replace(/^[•\-]\s*/, '').trim();
+  }
+
+  for (const rawLine of rawLines) {
+    const line = normalizeDocxLine(rawLine);
+    if (!line) {
+      blankRun += 1;
+      if (blankRun >= 2) currentLevel2 = '';
+      continue;
+    }
+    blankRun = 0;
+
     if (/^Level\s*01/i.test(line)) {
-      inLevel2 = false;
-      inLevel3 = false;
+      activeLevel = 1;
+      currentLevel1 = '';
+      currentLevel2 = '';
       continue;
     }
     if (/^Level\s*02/i.test(line)) {
-      inLevel2 = true;
-      inLevel3 = false;
+      activeLevel = 2;
       currentLevel1 = '';
       currentLevel2 = '';
       continue;
     }
     if (/^Level\s*03/i.test(line)) {
-      inLevel2 = false;
-      inLevel3 = true;
+      activeLevel = 3;
       currentLevel1 = '';
       currentLevel2 = '';
       continue;
     }
+    if (isIgnorableLabel(line)) continue;
 
-    const bulletMatch = line.match(/^[•\-]\s*(.+)$/);
-    if (!bulletMatch) continue;
-    const bullet = bulletMatch[1].trim();
-    if (!bullet) continue;
-
-    const normalized = normalizeLabel(bullet);
+    const normalized = normalizeLabel(line);
     const matchedLevel1 = knownLevel1Norm.get(normalized);
     if (matchedLevel1) {
       currentLevel1 = matchedLevel1;
@@ -205,47 +213,58 @@ export async function parseLevelsFromDocx(levelsFile, scenarios = []) {
       continue;
     }
 
-    if (inLevel2 && currentLevel1) {
-      const id = slugify(`${currentLevel1}-${bullet}`);
-      addOption({ id, label: bullet, parent: slugify(currentLevel1), depth: 2 });
+    if (!currentLevel1) continue;
+
+    if (activeLevel === 2) {
+      const id = slugify(`${currentLevel1}-${line}`);
+      addOption({ id, label: line, parent: slugify(currentLevel1), depth: 2 });
       continue;
     }
 
-    if (inLevel3) {
-      const asLevel2 = optionRows.find(
-        r => r.depth === 2 && labelsAreSimilar(r.label, bullet),
+    if (activeLevel === 3) {
+      const asExistingLevel2 = optionRows.find(
+        r =>
+          r.depth === 2 &&
+          r.parent === slugify(currentLevel1) &&
+          labelsAreSimilar(r.label, line),
       );
-      if (asLevel2) {
-        currentLevel1 = knownLevel1.find(v => slugify(v) === asLevel2.parent) || currentLevel1;
-        currentLevel2 = asLevel2.label;
+      if (asExistingLevel2) {
+        currentLevel2 = asExistingLevel2.label;
         continue;
       }
 
-      if (currentLevel1 && currentLevel2) {
+      if (!currentLevel2) {
+        currentLevel2 = line;
         const level2Id = slugify(`${currentLevel1}-${currentLevel2}`);
-        const id = slugify(`${currentLevel1}-${currentLevel2}-${bullet}`);
-        addOption({ id, label: bullet, parent: level2Id, depth: 3 });
+        addOption({ id: level2Id, label: currentLevel2, parent: slugify(currentLevel1), depth: 2 });
+        continue;
       }
+
+      const level2Id = slugify(`${currentLevel1}-${currentLevel2}`);
+      const id = slugify(`${currentLevel1}-${currentLevel2}-${line}`);
+      addOption({ id, label: line, parent: level2Id, depth: 3 });
     }
   }
 
-  scenarios.forEach(scenario => {
-    const parts = String(scenario.expectedPath || '')
-      .split('->')
-      .map(part => part.trim())
-      .filter(Boolean);
-    if (parts.length < 2) return;
+  if (optionRows.length === 0) {
+    scenarios.forEach(scenario => {
+      const parts = String(scenario.expectedPath || '')
+        .split('->')
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length < 2) return;
 
-    let parentId;
-    parts.forEach((label, idx) => {
-      const chain = parts.slice(0, idx + 1).join(' > ');
-      const id = slugify(chain);
-      const depth = idx + 1;
-      const parent = parentId;
-      addOption({ id, label, parent, depth });
-      parentId = id;
+      let parentId;
+      parts.forEach((label, idx) => {
+        const chain = parts.slice(0, idx + 1).join(' > ');
+        const id = slugify(chain);
+        const depth = idx + 1;
+        const parent = parentId;
+        addOption({ id, label, parent, depth });
+        parentId = id;
+      });
     });
-  });
+  }
 
   return { options: optionRows };
 }

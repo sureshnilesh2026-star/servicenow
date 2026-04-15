@@ -3,6 +3,7 @@ export interface NavigationOption {
   label: string;
   parent?: string;
   depth?: number;
+  requiresDescription?: boolean;
 }
 
 export interface LevelsPayload {

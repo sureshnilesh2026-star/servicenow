@@ -2,7 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseLevelsFromDocx, readScenariosFromXlsx } from './data-loaders.js';
+import { readScenariosFromXlsx } from './data-loaders.js';
+import { getManualLevelsPayload } from './manual-levels.js';
 
 const app = express();
 
@@ -13,7 +14,6 @@ const rootDir = process.cwd();
 const dataDir = path.join(rootDir, 'data');
 const responsesFile = path.join(dataDir, 'responses.json');
 const scenariosFile = path.join(dataDir, 'detabase.xlsx');
-const levelsFile = path.join(dataDir, 'level.docx');
 
 function ensureStore() {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -46,9 +46,7 @@ app.get('/api/scenarios', (_req, res) => {
 });
 
 app.get('/api/levels', async (_req, res) => {
-  const scenarios = readScenariosFromXlsx(scenariosFile);
-  const levels = await parseLevelsFromDocx(levelsFile, scenarios);
-  res.json(levels);
+  res.json(getManualLevelsPayload());
 });
 
 app.post('/api/responses', (req, res) => {
