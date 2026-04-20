@@ -20,10 +20,40 @@ const DUMMY_LAPTOP_MODEL = 'HP LaserJet Pro M404dn (Model: LJ-M404DN)';
 
 function normalizePath(path: string): string {
   return path
-    .split('->')
-    .map(part => part.trim().toLowerCase().replace(/\s+/g, ' '))
-    .filter(Boolean)
-    .join('->');
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, 'and')
+    .replace(/[\/\s]+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function normalizePathSegments(path: string): string[] {
+  const canonicalizeWords = (text: string): string =>
+    text
+      .replace(/\bissues\b/g, 'issue')
+      .replace(/\bdevices\b/g, 'device')
+      .replace(/\bkiosks\b/g, 'kiosk')
+      .replace(/\bsoftwares\b/g, 'software')
+      .replace(/\bproducts\b/g, 'product');
+
+  return path
+    .split(/\s*->\s*/)
+    .map(segment => normalizePath(canonicalizeWords(segment.toLowerCase())))
+    .filter(Boolean);
+}
+
+function isPathMatch(selectedPath: string, expectedPath: string): boolean {
+  const normalizedSelected = normalizePathSegments(selectedPath);
+  const normalizedExpected = normalizePathSegments(expectedPath);
+  if (normalizedExpected.length === 0) return false;
+  if (normalizedSelected.length < normalizedExpected.length) return false;
+
+  for (let i = 0; i < normalizedExpected.length; i += 1) {
+    if (normalizedSelected[i] !== normalizedExpected[i]) return false;
+  }
+  // Allow extra trailing detail (e.g. textbox input) beyond the expected path.
+  return true;
 }
 
 export function ParticipantView() {
@@ -88,10 +118,7 @@ export function ParticipantView() {
     const selectedPath = lastSelected?.requiresDescription
       ? `${selectedPathBase} -> ${descriptionInput.trim()}`
       : selectedPathBase;
-    const result =
-      normalizePath(selectedPath) === normalizePath(scenario.expectedPath)
-        ? 'CORRECT'
-        : 'WRONG';
+    const result = isPathMatch(selectedPath, scenario.expectedPath) ? 'CORRECT' : 'WRONG';
 
     const response = {
       id: currentParticipant.id,

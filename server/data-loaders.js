@@ -77,7 +77,19 @@ function parseScenarioText(rawText, expectedPath, index) {
     line => /where should .*navigate to raise a ticket\??/i.test(line),
   );
 
-  const title = scenarioLine.replace(/^scenario\s*:\s*/i, '').trim() || `Scenario ${index + 1}`;
+  const titleFromScenarioPrefix = scenarioLine.replace(/^scenario\s*:\s*/i, '').trim();
+  const titleFromFirstMeaningfulLine = lines.find(
+    line =>
+      !/^scenario\s*:/i.test(line) &&
+      !/^user\s*:/i.test(line) &&
+      !/^issue\s*:/i.test(line) &&
+      !/where should .*navigate to raise a ticket\??/i.test(line),
+  );
+
+  const title =
+    titleFromScenarioPrefix ||
+    (titleFromFirstMeaningfulLine ? titleFromFirstMeaningfulLine.trim() : '') ||
+    `Scenario ${index + 1}`;
 
   return {
     id: `scenario-${index + 1}`,
